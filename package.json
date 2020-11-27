@@ -1,5 +1,6 @@
 {
   "name": "await-queue",
+  "description": "A asynchronous task queue with execution management.",
   "author": "ChenZi<chenzi@ubun.tw>",
   "version": "0.1.0",
   "license": "MIT",
