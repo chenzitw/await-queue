@@ -5,8 +5,8 @@ import {
   JobEmptyEventListener,
   JobErrorHandlingMiddleware,
 } from './types';
-
 import { JobCanceledError } from './errors';
+import Callback from './utils/Callback';
 
 const defaultErrorHandlingMiddleware: JobErrorHandlingMiddleware = (error) => {
   throw error;
@@ -16,8 +16,8 @@ class AwaitQueue {
   protected jobSet: Job[];
   protected isProcessing: boolean;
   protected isPaused: boolean;
-  protected jobAddedFns: JobAddedEventListener[];
-  protected jobEmptyFns: JobEmptyEventListener[];
+  protected jobAddedCallback: Callback<Parameters<JobAddedEventListener>>;
+  protected jobEmptyCallback: Callback<Parameters<JobEmptyEventListener>>;
   protected processingJobErrorCount: number;
   protected errorHandlingMiddleware: JobErrorHandlingMiddleware;
 
@@ -25,39 +25,24 @@ class AwaitQueue {
     this.jobSet = [];
     this.isProcessing = false;
     this.isPaused = true;
-    this.jobAddedFns = [];
-    this.jobEmptyFns = [];
+    this.jobAddedCallback = new Callback();
+    this.jobEmptyCallback = new Callback();
     this.processingJobErrorCount = 0;
     this.errorHandlingMiddleware = defaultErrorHandlingMiddleware;
-  }
-
-  protected emitJobAddedFns(): void {
-    const amount = this.jobSet.length;
-
-    this.jobAddedFns.forEach((fn) => {
-      // TODO: try catch
-      fn.apply(undefined, [amount]);
-    });
-  }
-
-  protected emitJobEmptyFns(): void {
-    this.jobEmptyFns.forEach((fn) => {
-      // TODO: try catch
-      fn.apply(undefined);
-    });
   }
 
   protected addJob<T>(job: Job<T>): void {
     this.jobSet.push(job);
 
-    this.emitJobAddedFns();
+    const size = this.jobSet.length;
+    this.jobAddedCallback.trigger(size);
   }
 
   protected removeJobs(amount: number): void {
     this.jobSet.splice(0, amount);
 
     if (this.jobSet.length <= 0) {
-      this.emitJobEmptyFns();
+      this.jobEmptyCallback.trigger();
     }
   }
 
@@ -155,11 +140,11 @@ class AwaitQueue {
   }
 
   onAdded(fn: JobAddedEventListener): void {
-    this.jobAddedFns.push((size) => fn.apply(undefined, [size]));
+    this.jobAddedCallback.addListener((size) => fn.apply(undefined, [size]));
   }
 
   onEmpty(fn: JobEmptyEventListener): void {
-    this.jobEmptyFns.push(() => fn.apply(undefined));
+    this.jobEmptyCallback.addListener(() => fn.apply(undefined));
   }
 
   useErrorHandlingMiddleware(fn: JobErrorHandlingMiddleware): void {
@@ -171,6 +156,8 @@ class AwaitQueue {
   cleanup(): void {
     this.pause();
     this.clear();
+    this.jobAddedCallback.clearListeners();
+    this.jobEmptyCallback.clearListeners();
   }
 }
 
