@@ -6,48 +6,33 @@ import {
   JobErrorHandlingMiddleware,
 } from './types';
 import { JobCanceledError } from './errors';
-import Callback from './utils/Callback';
+import Queue from './utils/Queue';
 
 const defaultErrorHandlingMiddleware: JobErrorHandlingMiddleware = (error) => {
   throw error;
 };
 
 class AwaitQueue {
-  protected jobSet: Job[];
+  protected jobQueue: Queue<Job>
   protected isProcessing: boolean;
   protected isPaused: boolean;
-  protected jobAddedCallback: Callback<Parameters<JobAddedEventListener>>;
-  protected jobEmptyCallback: Callback<Parameters<JobEmptyEventListener>>;
   protected processingJobErrorCount: number;
   protected errorHandlingMiddleware: JobErrorHandlingMiddleware;
 
   constructor() {
-    this.jobSet = [];
+    this.jobQueue = new Queue();
     this.isProcessing = false;
     this.isPaused = true;
-    this.jobAddedCallback = new Callback();
-    this.jobEmptyCallback = new Callback();
     this.processingJobErrorCount = 0;
     this.errorHandlingMiddleware = defaultErrorHandlingMiddleware;
   }
 
-  protected addJob<T>(job: Job<T>): void {
-    this.jobSet.push(job);
-
-    const size = this.jobSet.length;
-    this.jobAddedCallback.trigger(size);
-  }
-
-  protected removeJobs(amount: number): void {
-    this.jobSet.splice(0, amount);
-
-    if (this.jobSet.length <= 0) {
-      this.jobEmptyCallback.trigger();
-    }
-  }
-
   protected async processJob(): Promise<void> {
-    const job = this.jobSet[0];
+    const job = this.jobQueue.getHead();
+
+    if (typeof job === 'undefined') {
+      return;
+    }
 
     let caughtError: any;
     let jobResult: any;
@@ -58,7 +43,7 @@ class AwaitQueue {
       caughtError = error;
     }
 
-    if (this.jobSet[0] !== job) {
+    if (this.jobQueue.getHead() !== job) {
       return;
     }
 
@@ -71,7 +56,7 @@ class AwaitQueue {
         // if catch fn throw error, reject this job and do next job
         job.reject.apply(undefined, [customError]);
         this.processingJobErrorCount = 0;
-        this.removeJobs(1);
+        this.jobQueue.pop();
         return;
       }
 
@@ -82,11 +67,11 @@ class AwaitQueue {
     // when not caught any error, resolve this job and do next job
     job.resolve.apply(undefined, [jobResult]);
     this.processingJobErrorCount = 0;
-    this.removeJobs(1);
+    this.jobQueue.pop();
   }
 
   protected async main(): Promise<void> {
-    if (!(!this.isProcessing && !this.isPaused && this.jobSet.length > 0)) {
+    if (!(!this.isProcessing && !this.isPaused && this.jobQueue.size() > 0)) {
       return;
     }
 
@@ -96,7 +81,7 @@ class AwaitQueue {
 
     this.isProcessing = false;
 
-    if (!this.isPaused && this.jobSet.length > 0) {
+    if (!this.isPaused && this.jobQueue.size() > 0) {
       this.main();
     }
   }
@@ -119,32 +104,39 @@ class AwaitQueue {
 
   skip(num: number = 1): void {
     for (let index = 0; index < num; index++) {
-      this.jobSet[index].reject(new JobCanceledError());
+      const job = this.jobQueue.getHead();
+      if (typeof job === 'undefined') {
+        return;
+      }
+
+      this.jobQueue.pop();
+      job.reject.apply(undefined, [new JobCanceledError()]);
     }
 
-    this.removeJobs(num);
   }
 
   clear(): void {
-    this.skip(this.jobSet.length);
+    this.skip(this.jobQueue.size());
   }
 
   promise<T>(fn: AsyncFn<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      this.addJob({
+      const job: Job = {
         fn: fn,
         resolve: resolve,
         reject: reject,
-      });
+      };
+
+      this.jobQueue.push(job);
     });
   }
 
   onAdded(fn: JobAddedEventListener): void {
-    this.jobAddedCallback.addListener((size) => fn.apply(undefined, [size]));
+    this.jobQueue.onAdded((size) => fn.apply(undefined, [size]));
   }
 
   onEmpty(fn: JobEmptyEventListener): void {
-    this.jobEmptyCallback.addListener(() => fn.apply(undefined));
+    this.jobQueue.onEmpty(() => fn.apply(undefined));
   }
 
   useErrorHandlingMiddleware(fn: JobErrorHandlingMiddleware): void {
@@ -156,8 +148,7 @@ class AwaitQueue {
   cleanup(): void {
     this.pause();
     this.clear();
-    this.jobAddedCallback.clearListeners();
-    this.jobEmptyCallback.clearListeners();
+    this.jobQueue.cleanup();
   }
 }
 
