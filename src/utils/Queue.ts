@@ -22,6 +22,10 @@ class Queue<T = any> {
   }
 
   pop(amount: number = 1): void {
+    if (!(amount > 0 && this.items.length > 0)) {
+      return;
+    }
+
     this.items.splice(0, amount);
 
     if (this.items.length === 0) {
