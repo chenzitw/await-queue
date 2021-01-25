@@ -13,7 +13,7 @@ const defaultErrorHandlingMiddleware: JobErrorHandlingMiddleware = (error) => {
 };
 
 class AwaitQueue {
-  protected jobQueue: Queue<Job>
+  protected jobQueue: Queue<Job>;
   protected isProcessing: boolean;
   protected isPaused: boolean;
   protected processingJobErrorCount: number;

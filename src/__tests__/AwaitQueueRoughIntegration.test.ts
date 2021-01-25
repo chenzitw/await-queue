@@ -250,19 +250,21 @@ describe('AwaitQueue rough integration', () => {
         disconnect();
       });
 
-      const errHandle = jest.fn<ErrHandleReturn, ErrHandleParams>((_error, times) => {
-        awaitQueue.pause();
-        disconnect();
+      const errHandle = jest.fn<ErrHandleReturn, ErrHandleParams>(
+        (_error, times) => {
+          awaitQueue.pause();
+          disconnect();
 
-        (async () => {
-          await connect();
-          awaitQueue.run();
-        })();
+          (async () => {
+            await connect();
+            awaitQueue.run();
+          })();
 
-        if (times >= 3) {
-          throw new Error();
-        }
-      });
+          if (times >= 3) {
+            throw new Error();
+          }
+        },
+      );
 
       awaitQueue.onAdded(onAddedFn);
 
