@@ -105,18 +105,21 @@ class AwaitQueue {
   skip(num: number = 1): void {
     for (let index = 0; index < num; index++) {
       const job = this.jobQueue.getHead();
+      this.jobQueue.pop();
       if (typeof job === 'undefined') {
         return;
       }
 
-      this.jobQueue.pop();
       job.reject.apply(undefined, [new JobCanceledError()]);
     }
-
   }
 
   clear(): void {
-    this.skip(this.jobQueue.size());
+    const queueSize = this.jobQueue.size();
+
+    if (queueSize > 0) {
+      this.skip(queueSize);
+    }
   }
 
   promise<T>(fn: AsyncFn<T>): Promise<T> {
