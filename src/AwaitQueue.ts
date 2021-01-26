@@ -134,6 +134,10 @@ class AwaitQueue {
     });
   }
 
+  size(): number {
+    return this.jobQueue.size();
+  }
+
   onAdded(fn: JobAddedEventListener): void {
     this.jobQueue.onAdded((size) => fn.apply(undefined, [size]));
   }
